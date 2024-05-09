@@ -1,0 +1,422 @@
+---
+title: "ML Assignment: Predicting Fires"
+output: html_notebook
+---
+
+# Packages
+
+```{r}
+library(tidyverse)
+library(mosaic)
+library(car)
+library(tidymodels)
+library(boot)
+library(supernova)
+library(e1071)
+library(rsample)
+library(cvms)
+library(ggimage)
+library(rsvg)
+library(performance)
+library(MASS)
+```
+
+#Data
+
+
+```{r}
+fire.bejaia <- read.csv('~/Documents/UVA/Machine Learning/Data/Algeria_Forest_Fires_Bejaia_Region_Dataset.csv')
+fire.sidi <- read.csv('~/Documents/UVA/Machine Learning/Data/Algeria_Forest_Fires_Sidi_Bel_Abbes_Region_Dataset.csv')
+```
+
+```{r}
+summary(fire.bejaia)
+
+summary(fire.sidi)
+```
+```{r}
+dim(fire.bejaia)
+dim(fire.sidi)
+```
+
+
+```{r}
+fire.bejaia %>% count(Classes)
+
+fire.sidi %>% count(Classes)
+```
+
+```{r}
+#why they are classed differently
+fire.bejaia$Classes
+
+# checking spacing of fire and not fire
+sum(ifelse(fire.bejaia$Classes == c("fire") , 1, 0))
+sum(ifelse(fire.bejaia$Classes == c("fire ") , 1, 0))
+sum(ifelse(fire.bejaia$Classes == c("fire   ") , 1, 0))
+
+
+sum(ifelse(fire.bejaia$Classes == c("not fire") , 1, 0))
+sum(ifelse(fire.bejaia$Classes == c("not fire ") , 1, 0))
+sum(ifelse(fire.bejaia$Classes == c("not fire   ") , 1, 0))
+```
+```{r}
+# BEJAIA 
+# 1 is fire, 0 is not fire
+fire.bejaia <- fire.bejaia %>%
+  mutate(firedays = ifelse(Classes %in% c("fire", "fire ", "fire   "), 1, 0))
+
+fire.bejaia
+
+fire.bejaia %>% count(firedays) # check if 1s and 0s are classed correctly, should be fire = 59, not fire = 63
+
+59+63
+```
+
+```{r}
+#why they are classed differently
+fire.sidi$Classes
+
+# checking spacing of fire and not fire
+sum(ifelse(fire.sidi$Classes == c("fire   ") , 1, 0))
+
+
+sum(ifelse(fire.sidi$Classes == c("not fire    ") , 1, 0))
+sum(ifelse(fire.sidi$Classes == c("not fire     ") , 1, 0))
+sum(ifelse(fire.sidi$Classes == c("not fire   ") , 1, 0))
+```
+
+
+```{r}
+# 1 is fire, 0 is not fire
+fire.sidi <- fire.sidi %>%
+  mutate(firedays = ifelse(Classes %in% c("fire   "), 1, 0))
+
+fire.sidi
+
+fire.sidi %>% count(firedays) # check if 1s and 0s are classed correctly, should be fire = 79, not fire = 43
+
+79+43
+
+```
+
+```{r}
+# combining the two datasets
+fire.bejaia$region <- rep("Bejaia", 122)
+
+fire.sidi$region <- rep("Sidi", 122)
+
+fire <- rbind(fire.bejaia, fire.sidi)
+fire
+```
+
+#selecting variables
+```{r}
+fit = glm(firedays ~ Temperature + RH + Ws +Rain + FFMC + DMC + DC + ISI + BUI + FWI, data = fire, family = "binomial")
+
+both_fit = MASS::stepAIC(fit, scope = firedays ~ Temperature + RH + Ws +Rain + FFMC + DMC + DC + ISI + BUI + FWI, direction="both")
+```
+
+```{r}
+car::Anova(best_fit)
+```
+
+
+# Checking Assumptions
+
+```{r}
+glm(firedays ~ Temperature + Rain + FFMC + DMC + DC + ISI, data = fire, family = "binomial")
+```
+```{r}
+model.both <- glm(firedays ~ Temperature + Rain + FFMC + DMC + DC + ISI, data = fire, family = "binomial")
+```
+
+
+```{r}
+check_model(glm(firedays ~ Temperature + Rain + FFMC + DMC + DC + ISI, data = fire, family = "binomial"))
+```
+```{r}
+vif(model.both)
+```
+For the Zero conditional mean of the residuals assumption, we can use Ramsey's RESET test. It is available in R as lmtest::resettest(). This function accepts an lm() model object and tests the hypothesis that non-linear combinations of the estimated residuals εˆi
+```{r}
+lmtest::resettest(model.both)
+```
+For the assumption that Residuals follow a normal distribution, we can run Shapiro's test for normality on the residuals εˆi
+; recall that it is available as shapiro.test() in R.
+```{r}
+shapiro.test(resid(model.both))
+```
+```{r}
+plot(model.both, which = 5)
+
+# Calculate Cook's distance
+cooksd <- cooks.distance(model)
+
+# Identify outliers based on Cook's distance
+cooksd > 1
+```
+```{r}
+hat_values <- hatvalues(model.both)
+
+# Define thresholds
+hat_threshold <- 2 * mean(model.both)
+
+# Identify outliers
+outliers <- which(hat_values > hat_threshold)
+
+# Print indices of potential outliers
+print(outliers)
+
+sum(hat_values > 2.5 * mean(hat_values))
+```
+
+> stepwise selection did not choose a good model
+
+#building a better model
+```{r}
+MASS::stepAIC(fit, direction = "backward")
+```
+
+
+```{r}
+forward.model = MASS::stepAIC(lm(firedays~1, data = fire), scope = firedays ~ Temperature + RH + Ws +Rain + FFMC + DMC + DC + ISI + BUI + FWI, direction="forward")
+```
+```{r}
+model.2 <- glm(firedays ~ FFMC + FWI + RH + DMC + Rain + Ws, data = fire, family = binomial)
+```
+
+```{r}
+check_model(model.2)
+```
+#New model
+```{r}
+fire
+```
+
+```{r}
+# Get the column names of the predictors
+predictor_names <- c("Temperature", "RH", "Ws", "Rain", "FFMC", "DMC", "DC", "ISI", "BUI", "FWI")
+
+# Generate combinations of three predictors
+all_combn_predictors <- combn(predictor_names, 3) %>%
+  t() %>%
+  as.data.frame()
+
+#using a for() loop to create linear models for each combination
+for(i in 1:nrow(all_combn_predictors)){
+  
+   # get the i-th row of the dataframe
+  selected_vars <- all_combn_predictors[i,]
+  
+  # build the formula
+  model_formula <- as.formula(paste("Classes ~", paste(selected_vars, collapse="+")))
+  print(model_formula) #prints out all linear models possible with Classes as predictor
+}
+```
+
+
+```{r}
+#creating logistic regression models to identify small residual deviance
+best_residual_deviance       <- Inf   # we don't know yet 
+best_predictors <- c()   # start empty, fill later
+best_model      <- NULL  # we don't know yet
+
+for(i in 1:nrow(all_combn_predictors)){
+  
+   # get the i-th row of the dataframe
+  selected_vars <- all_combn_predictors[i,]
+  
+  # build the formula
+  model_formula <- as.formula(paste("firedays ~", paste(selected_vars, collapse="+")))
+  
+  fitted_model      <- glm(model_formula, data=fire, family = binomial)
+  current_model_residual_deviance <- deviance(fitted_model)
+  
+  if(current_model_residual_deviance < best_residual_deviance){
+    best_residual_deviance <- current_model_residual_deviance
+    best_predictors <- selected_vars
+    best_model <- fitted_model
+    cat("Found a better model!\n")
+    cat(paste0("  Vars: [", paste(selected_vars, collapse=","), "]\n"))
+    cat(paste0("  Residual Deviance:", best_residual_deviance, "\n\n"))
+  }
+  
+}
+```
+```{r}
+model <- glm(firedays ~ Temperature +  DC + ISI, data = fire, family = binomial)
+```
+
+##Check assumptions
+
+```{r}
+check_model(model)
+```
+
+```{r}
+#multicollinearity
+vif(model)
+
+#independence of errors
+
+
+#outliers
+
+hat_values <- hatvalues(model)
+# Define thresholds
+hat_threshold <- 2 * mean(model)
+# Identify outliers
+outliers <- which(hat_values > hat_threshold)
+# Print indices of potential outliers
+print(outliers)
+sum(hat_values > 2.5 * mean(hat_values))
+
+```
+> VIF looks good
+
+# visualisation
+```{r}
+#temperature
+fire %>%
+  ggplot(aes(x = as.factor(region), y = Temperature)) + 
+  geom_boxplot(width = 0.3, fill = "white") +
+  geom_jitter(aes(color = as.factor(region), shape = as.factor(region)), width = 0.1, size = 1) + 
+  xlab("Region") +
+  ggtitle("Box-Plots for the Distribution of Temperature across the Two Regions") +
+  theme_minimal(base_size = 8)
+
+#DC
+fire %>%
+  ggplot(aes(x = as.factor(region), y = DC)) + 
+  geom_boxplot(width = 0.3, fill = "white") +
+  geom_jitter(aes(color = as.factor(region), shape = as.factor(region)), width = 0.1, size = 1) + 
+  xlab("Region") +
+  ggtitle("Box-Plots for the Distribution of DC across the Two Regions") +
+  theme_minimal(base_size = 8)
+
+#ISI
+fire %>%
+  ggplot(aes(x = as.factor(region), y = ISI)) + 
+  geom_boxplot(width = 0.3, fill = "white") +
+  geom_jitter(aes(color = as.factor(region), shape = as.factor(region)), width = 0.1, size = 1) + 
+  xlab("Region") +
+  ggtitle("Box-Plots for the Distribution of ISI across the Two Regions") +
+  theme_minimal(base_size = 8)
+```
+```{r}
+summary(model)
+
+anova(model, test="Chisq")
+```
+##Machine Learning
+
+```{r}
+#predicting fires in Sidi based on fires in Bejaia
+model <- glm(firedays ~ Temperature +  DC + ISI, data = fire.bejaia, family = binomial)
+
+predictions <- predict(model, fire.bejaia, type = 'response') > .5
+
+table(fire.bejaia$firedays, predictions)
+(table(fire.bejaia$firedays, predictions)[1,1] + table(fire.bejaia$firedays, predictions)[2,2])  / nrow(fire.bejaia) #Accuracy
+
+# predicting Sidi
+predictions.sidi <- predict(model, fire.sidi, type = 'response') > .5
+
+table(fire.bejaia$firedays, predictions.sidi)
+(table(fire.bejaia$firedays, predictions.sidi)[1,1] + table(fire.bejaia$firedays, predictions.sidi)[2,2])  / nrow(fire.sidi) # accuracy
+```
+```{r}
+# Step 1: Create an empty output vector
+fitted_value <- NULL
+MSE <- NULL
+
+# Step 2: Construct a for loop
+for (i in 1:nrow(fire)) {
+  
+# Step 3: 3. During each iteration, create a new training set consisting of all observations except the observation in the current row. The remaining observation is your test set.
+  train <- fire[-i, ]  #  creates a training set without the current observation i
+  test <- fire[i, ]    # Select only the current observation
+  
+# Step 4: Train the model
+  model <- glm(firedays ~ Temperature +  DC + ISI, data = fire, family = binomial)
+  
+ # Step 5: During this same iteration, predict the remaining observation based on the trained model using predict().
+   predictions <- predict(model, test, type = 'response' )
+  fitted_value[i] <- predictions
+   
+   MSE[i] <-  (1/nrow(test))*sum((test$diabetes-predictions)^2)
+}
+
+fitted_value[1]
+```
+
+```{r}
+#80/20 split
+split <- initial_split(fire, prop = 0.8, strata = firedays) 
+training <- training(split) 
+testing <- testing(split)
+```
+
+
+```{r}
+#predict on training set
+
+model <- glm(firedays ~ Temperature +  DC + ISI, data = training, family = binomial)
+predictions.train <- predict(model, training, type = 'response') > .8 # threshold of 80%
+
+#confusion matrix
+table(training$firedays, predictions.train)
+
+#accuracy
+(table(training$firedays, predictions.train)[1,1] + table(training$firedays, predictions.train)[2,2])  / nrow(training) #Accuracy
+
+#sensitivity / recall
+table(training$firedays, predictions.train)[2,2] / sum(training$firedays == 1)
+
+
+#precision
+table(training$firedays, predictions.train)[2,2] / (table(training$firedays, predictions.train)[2,2] + table(training$firedays, predictions.train)[1,2])
+```
+
+
+```{r}
+# predicting on testing set
+predictions.test <- predict(model, testing, type = 'response') > .5
+
+table(testing$firedays, predictions.test)
+(table(testing$firedays, predictions.test)[1,1] + table(testing$firedays, predictions.test)[2,2])  / nrow(testing) # accuracy
+
+
+#sensitivity / recall
+table(testing$firedays, predictions.test)[2,2] / sum(testing$firedays == 1)
+
+
+#precision
+table(testing$firedays, predictions.test)[2,2] / (table(testing$firedays, predictions.test)[2,2] + table(testing$firedays, predictions.test)[1,2])
+```
+```{r}
+train_classes     <- testing$firedays
+train_predictions <- predict(glm(firedays ~ Temperature +  DC + ISI, data = training, family = binomial), testing, type = "response")
+
+plot_df <- data.frame(train_classes     = train_classes,
+                      train_predictions = train_predictions)
+
+g.bejaia <-
+    (ggplot(plot_df, aes(x = train_predictions, fill = train_classes))
+        + geom_histogram(alpha = 0.8, binwidth = 0.05, position = "stack")
+
+        # OPTIONAL: Customising the plot.
+        # You can delete these lines below if you don't like the theme
+        # Or you can choose other themes from
+        # https://ggplot2.tidyverse.org/reference/ggtheme.html
+        + theme_bw()
+        + labs(x = "Predictions on the training set",
+               y = "Count")
+        + scale_fill_brewer(name = "Target", type = "qual", palette = 2)
+        + scale_x_continuous(labels = scales::percent, breaks = seq(0, 1, 0.1))
+        + ggtitle("Histogram of probability distributions fitted to the data")
+    )
+g.bejaia
+```
+
