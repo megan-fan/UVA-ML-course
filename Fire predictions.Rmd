@@ -22,11 +22,14 @@ library(MASS)
 ```
 
 #Data
+```{r}
+read.csv2("~/Documents/University/UVA/Machine Learning/Data/Algerian_forest_fires_dataset_UPDATE.csv")
+```
 
 
 ```{r}
-fire.bejaia <- read.csv('~/Documents/UVA/Machine Learning/Data/Algeria_Forest_Fires_Bejaia_Region_Dataset.csv')
-fire.sidi <- read.csv('~/Documents/UVA/Machine Learning/Data/Algeria_Forest_Fires_Sidi_Bel_Abbes_Region_Dataset.csv')
+fire.bejaia <- read.csv('~/Documents/University/UVA/Machine Learning/Data/Algeria_Forest_Fires_Bejaia_Region_Dataset.csv')
+fire.sidi <- read.csv('~/Documents/University/UVA/Machine Learning/Data/Algeria_Forest_Fires_Sidi_Bel_Abbes_Region_Dataset.csv')
 ```
 
 ```{r}
@@ -98,6 +101,10 @@ fire.sidi %>% count(firedays) # check if 1s and 0s are classed correctly, should
 
 79+43
 
+fire.bejaia %>% count(firedays)
+
+fire.sidi %>% count(firedays)
+
 ```
 
 ```{r}
@@ -108,6 +115,8 @@ fire.sidi$region <- rep("Sidi", 122)
 
 fire <- rbind(fire.bejaia, fire.sidi)
 fire
+
+
 ```
 
 #selecting variables
@@ -117,16 +126,9 @@ fit = glm(firedays ~ Temperature + RH + Ws +Rain + FFMC + DMC + DC + ISI + BUI +
 both_fit = MASS::stepAIC(fit, scope = firedays ~ Temperature + RH + Ws +Rain + FFMC + DMC + DC + ISI + BUI + FWI, direction="both")
 ```
 
-```{r}
-car::Anova(best_fit)
-```
 
 
-# Checking Assumptions
-
-```{r}
-glm(firedays ~ Temperature + Rain + FFMC + DMC + DC + ISI, data = fire, family = "binomial")
-```
+### Checking Assumptions
 ```{r}
 model.both <- glm(firedays ~ Temperature + Rain + FFMC + DMC + DC + ISI, data = fire, family = "binomial")
 ```
@@ -138,15 +140,7 @@ check_model(glm(firedays ~ Temperature + Rain + FFMC + DMC + DC + ISI, data = fi
 ```{r}
 vif(model.both)
 ```
-For the Zero conditional mean of the residuals assumption, we can use Ramsey's RESET test. It is available in R as lmtest::resettest(). This function accepts an lm() model object and tests the hypothesis that non-linear combinations of the estimated residuals εˆi
-```{r}
-lmtest::resettest(model.both)
-```
-For the assumption that Residuals follow a normal distribution, we can run Shapiro's test for normality on the residuals εˆi
-; recall that it is available as shapiro.test() in R.
-```{r}
-shapiro.test(resid(model.both))
-```
+
 ```{r}
 plot(model.both, which = 5)
 
@@ -182,17 +176,12 @@ MASS::stepAIC(fit, direction = "backward")
 ```{r}
 forward.model = MASS::stepAIC(lm(firedays~1, data = fire), scope = firedays ~ Temperature + RH + Ws +Rain + FFMC + DMC + DC + ISI + BUI + FWI, direction="forward")
 ```
-```{r}
-model.2 <- glm(firedays ~ FFMC + FWI + RH + DMC + Rain + Ws, data = fire, family = binomial)
-```
 
 ```{r}
+model.2 <- glm(firedays ~ FFMC + FWI + RH + DMC + Rain + Ws, data = fire, family = binomial)
 check_model(model.2)
 ```
 #New model
-```{r}
-fire
-```
 
 ```{r}
 # Get the column names of the predictors
@@ -318,14 +307,69 @@ model <- glm(firedays ~ Temperature +  DC + ISI, data = fire.bejaia, family = bi
 predictions <- predict(model, fire.bejaia, type = 'response') > .5
 
 table(fire.bejaia$firedays, predictions)
-(table(fire.bejaia$firedays, predictions)[1,1] + table(fire.bejaia$firedays, predictions)[2,2])  / nrow(fire.bejaia) #Accuracy
+(table(fire.bejaia$firedays, predictions)[1,1] + table(fire.bejaia$firedays, predictions)[2,2])  / nrow(fire.bejaia)
+
+#MSE
+mean((1/nrow(test))*sum((fire.bejaia$firedays-predictions)^2))
+
+#Accuracy
 
 # predicting Sidi
 predictions.sidi <- predict(model, fire.sidi, type = 'response') > .5
 
 table(fire.bejaia$firedays, predictions.sidi)
 (table(fire.bejaia$firedays, predictions.sidi)[1,1] + table(fire.bejaia$firedays, predictions.sidi)[2,2])  / nrow(fire.sidi) # accuracy
+
+#MSE
+(1/nrow(test))*sum((fire.sidi$firedays-predictions.sidi)^2)
+
 ```
+```{r}
+conf_matrix <- table(fire.bejaia$firedays, predictions)
+conf_matrix
+dimnames(conf_matrix) <- list(
+  Bejaia = c("No Fire", "Fire"), 
+  Predictions = c("No Fire", "Fire")
+)
+
+
+
+plot_confusion_matrix(as_tibble(conf_matrix), 
+                      target_col = "Bejaia", 
+                      prediction_col = "Predictions",
+                      
+                      # Customizing the plot
+                      add_normalized = TRUE,
+                      add_col_percentages = FALSE,
+                      add_row_percentages = FALSE,
+                      counts_col = "n",
+                      add_zero_shading = FALSE
+                      )
+```
+```{r}
+conf_matrix <- table(fire.bejaia$firedays, predictions.sidi)
+conf_matrix
+dimnames(conf_matrix) <- list(
+  Sidi = c("No Fire", "Fire"), 
+  Predictions = c("No Fire", "Fire")
+)
+
+
+
+plot_confusion_matrix(as_tibble(conf_matrix), 
+                      target_col = "Sidi", 
+                      prediction_col = "Predictions",
+                      
+                      # Customizing the plot
+                      add_normalized = TRUE,
+                      add_col_percentages = FALSE,
+                      add_row_percentages = FALSE,
+                      counts_col = "n",
+                      add_zero_shading = FALSE
+                      )
+```
+
+
 ```{r}
 # Step 1: Create an empty output vector
 fitted_value <- NULL
@@ -345,10 +389,10 @@ for (i in 1:nrow(fire)) {
    predictions <- predict(model, test, type = 'response' )
   fitted_value[i] <- predictions
    
-   MSE[i] <-  (1/nrow(test))*sum((test$diabetes-predictions)^2)
+   MSE[i] <-  (1/nrow(test))*sum((test$firedays-fitted_value)^2)
 }
 
-fitted_value[1]
+mean(MSE)
 ```
 
 ```{r}
@@ -377,6 +421,32 @@ table(training$firedays, predictions.train)[2,2] / sum(training$firedays == 1)
 
 #precision
 table(training$firedays, predictions.train)[2,2] / (table(training$firedays, predictions.train)[2,2] + table(training$firedays, predictions.train)[1,2])
+
+#MSE
+(1/nrow(test))*sum((training$firedays-predictions.train)^2)
+```
+```{r}
+conf_matrix <- table(training$firedays, predictions.train)
+conf_matrix
+dimnames(conf_matrix) <- list(
+  Training = c("No Fire", "Fire"), 
+  Predictions = c("No Fire", "Fire")
+)
+
+
+
+plot_confusion_matrix(as_tibble(conf_matrix), 
+                      target_col = "Training", 
+                      prediction_col = "Predictions",
+                      
+                      # Customizing the plot
+                      add_normalized = TRUE,
+                      add_col_percentages = FALSE,
+                      add_row_percentages = FALSE,
+                      counts_col = "n",
+                      add_zero_shading = FALSE
+                      )
+
 ```
 
 
@@ -384,8 +454,7 @@ table(training$firedays, predictions.train)[2,2] / (table(training$firedays, pre
 # predicting on testing set
 predictions.test <- predict(model, testing, type = 'response') > .5
 
-table(testing$firedays, predictions.test)
-(table(testing$firedays, predictions.test)[1,1] + table(testing$firedays, predictions.test)[2,2])  / nrow(testing) # accuracy
+conf_matrix <- table(testing$firedays, predictions.test)(table(testing$firedays, predictions.test)[1,1] + table(testing$firedays, predictions.test)[2,2])  / nrow(testing) # accuracy
 
 
 #sensitivity / recall
@@ -394,7 +463,37 @@ table(testing$firedays, predictions.test)[2,2] / sum(testing$firedays == 1)
 
 #precision
 table(testing$firedays, predictions.test)[2,2] / (table(testing$firedays, predictions.test)[2,2] + table(testing$firedays, predictions.test)[1,2])
+
+#MSE
+(1/nrow(test))*sum((testing$firedays-predictions.test)^2)
 ```
+
+
+```{r}
+conf_matrix <- table(testing$firedays, predictions.test)
+conf_matrix
+dimnames(conf_matrix) <- list(
+  test.set = c("No Fire", "Fire"), 
+  test.predictions = c("No Fire", "Fire")
+)
+
+
+
+plot_confusion_matrix(as_tibble(conf_matrix), 
+                      target_col = "test.set", 
+                      prediction_col = "test.predictions",
+                      
+                      # Customizing the plot
+                      add_normalized = TRUE,
+                      add_col_percentages = FALSE,
+                      add_row_percentages = FALSE,
+                      counts_col = "n",
+                      add_zero_shading = FALSE
+                      )
+
+```
+
+
 ```{r}
 train_classes     <- testing$firedays
 train_predictions <- predict(glm(firedays ~ Temperature +  DC + ISI, data = training, family = binomial), testing, type = "response")
@@ -403,7 +502,7 @@ plot_df <- data.frame(train_classes     = train_classes,
                       train_predictions = train_predictions)
 
 g.bejaia <-
-    (ggplot(plot_df, aes(x = train_predictions, fill = train_classes))
+    (ggplot(plot_df, aes(x = train_predictions, fill = as.factor(train_classes)))
         + geom_histogram(alpha = 0.8, binwidth = 0.05, position = "stack")
 
         # OPTIONAL: Customising the plot.
@@ -411,11 +510,11 @@ g.bejaia <-
         # Or you can choose other themes from
         # https://ggplot2.tidyverse.org/reference/ggtheme.html
         + theme_bw()
-        + labs(x = "Predictions on the training set",
+        + labs(x = "Predictions on the Testing set",
                y = "Count")
         + scale_fill_brewer(name = "Target", type = "qual", palette = 2)
         + scale_x_continuous(labels = scales::percent, breaks = seq(0, 1, 0.1))
-        + ggtitle("Histogram of probability distributions fitted to the data")
+        + ggtitle("Histogram of Fire Predictions")
     )
 g.bejaia
 ```
