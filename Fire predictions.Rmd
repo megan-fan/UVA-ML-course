@@ -10,33 +10,32 @@ library(tidyverse)
 library(mosaic)
 library(car)
 library(tidymodels)
-library(boot)
-library(supernova)
-library(e1071)
-library(rsample)
 library(cvms)
-library(ggimage)
-library(rsvg)
 library(performance)
 library(MASS)
 ```
 
 #Data
+
 ```{r}
-read.csv2("~/Documents/University/UVA/Machine Learning/Data/Algerian_forest_fires_dataset_UPDATE.csv")
+data <- read.csv("~/Documents/University/UVA/Machine Learning/Algerian_forest_fires_dataset.csv")
+data
 ```
 
 
-```{r}
-fire.bejaia <- read.csv('~/Documents/University/UVA/Machine Learning/Data/Algeria_Forest_Fires_Bejaia_Region_Dataset.csv')
-fire.sidi <- read.csv('~/Documents/University/UVA/Machine Learning/Data/Algeria_Forest_Fires_Sidi_Bel_Abbes_Region_Dataset.csv')
-```
+
 
 ```{r}
-summary(fire.bejaia)
+fire.bejaia <- data[2:123,]
 
-summary(fire.sidi)
+fire.sidi <- data[126:247,]
+
+fire.bejaia
+
+fire.sidi
+
 ```
+
 ```{r}
 dim(fire.bejaia)
 dim(fire.sidi)
@@ -100,11 +99,6 @@ fire.sidi
 fire.sidi %>% count(firedays) # check if 1s and 0s are classed correctly, should be fire = 79, not fire = 43
 
 79+43
-
-fire.bejaia %>% count(firedays)
-
-fire.sidi %>% count(firedays)
-
 ```
 
 ```{r}
@@ -115,8 +109,6 @@ fire.sidi$region <- rep("Sidi", 122)
 
 fire <- rbind(fire.bejaia, fire.sidi)
 fire
-
-
 ```
 
 #selecting variables
@@ -145,7 +137,7 @@ vif(model.both)
 plot(model.both, which = 5)
 
 # Calculate Cook's distance
-cooksd <- cooks.distance(model)
+cooksd <- cooks.distance(model.both)
 
 # Identify outliers based on Cook's distance
 cooksd > 1
@@ -178,7 +170,7 @@ forward.model = MASS::stepAIC(lm(firedays~1, data = fire), scope = firedays ~ Te
 ```
 
 ```{r}
-model.2 <- glm(firedays ~ FFMC + FWI + RH + DMC + Rain + Ws, data = fire, family = binomial)
+model.2 <- glm(firedays ~ FFMC + FWI + RH + DMC + Rain + Ws, data = fire, family = "binomial")
 check_model(model.2)
 ```
 #New model
@@ -310,20 +302,22 @@ table(fire.bejaia$firedays, predictions)
 (table(fire.bejaia$firedays, predictions)[1,1] + table(fire.bejaia$firedays, predictions)[2,2])  / nrow(fire.bejaia)
 
 #MSE
-mean((1/nrow(test))*sum((fire.bejaia$firedays-predictions)^2))
+(1/nrow(fire.bejaia))*sum((fire.bejaia$firedays-predictions)^2)
 
 #Accuracy
 
 # predicting Sidi
-predictions.sidi <- predict(model, fire.sidi, type = 'response') > .5
+predictions.sidi <- predict(model, fire.sidi, type = 'response') >0.5 
 
-table(fire.bejaia$firedays, predictions.sidi)
-(table(fire.bejaia$firedays, predictions.sidi)[1,1] + table(fire.bejaia$firedays, predictions.sidi)[2,2])  / nrow(fire.sidi) # accuracy
+table(fire.sidi$firedays, predictions.sidi)
+(table(fire.sidi$firedays, predictions.sidi)[1,1] + table(fire.sidi$firedays, predictions.sidi)[2,2])  / nrow(fire.sidi) # accuracy
 
 #MSE
-(1/nrow(test))*sum((fire.sidi$firedays-predictions.sidi)^2)
+
+(1/nrow(fire.sidi))*sum((fire.sidi$firedays-predictions.sidi)^2)
 
 ```
+
 ```{r}
 conf_matrix <- table(fire.bejaia$firedays, predictions)
 conf_matrix
