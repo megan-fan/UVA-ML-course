@@ -17,8 +17,10 @@ library(MASS)
 
 #Data
 
+> data can be downloaded from https://archive.ics.uci.edu/dataset/547/algerian+forest+fires+dataset 
+
 ```{r}
-rawdata <- read.csv2("~/Documents/University/UVA/Machine Learning/Data/Algerian_forest_fires_dataset_UPDATE.csv")
+rawdata <- read.csv2("Algerian_forest_fires_dataset_UPDATE.csv")
 
 fire.data <- rawdata %>%
   separate(Bejaia.Region.Dataset, into = c("day", "month", "year", "Temperature", "RH", "Ws", "Rain", "FFMC", "DMC", "DC", "ISI", "BUI", "FWI", "Classes"), sep = ",")
